@@ -1,0 +1,375 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#171923">
+<title>NEXO — Private Messages</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{--dark:#171923;--panel:#202331;--light:#f5f6fa;--white:#fff;--purple:#7965ed;--muted:#9297a8;--border:#e8e9ef}
+*{box-sizing:border-box}
+body{margin:0;font-family:Arial,sans-serif;background:var(--light);color:#202331}
+button,input{font:inherit}
+button{cursor:pointer;border:0;border-radius:9px;padding:11px 16px;background:var(--purple);color:white;font-weight:600}
+button:disabled{opacity:.5;cursor:not-allowed}
+input{width:100%;padding:13px;border:1px solid var(--border);border-radius:9px;outline:none}
+input:focus{border-color:var(--purple)}
+.hidden{display:none!important}
+.muted{color:var(--muted);font-size:13px}
+#auth{min-height:100vh;display:grid;place-items:center;padding:20px}
+.auth-card{width:100%;max-width:390px;background:white;padding:30px;border-radius:18px;box-shadow:0 12px 45px #16192a12}
+.logo{font-size:29px;font-weight:800;letter-spacing:5px;color:var(--purple)}
+.auth-card h2{margin-bottom:7px}
+.auth-card input{margin:9px 0}
+.auth-card button{width:100%;margin-top:10px}
+#app{height:100dvh;display:flex;overflow:hidden}
+.sidebar{width:310px;flex-shrink:0;background:var(--dark);color:white;display:flex;flex-direction:column}
+.side-head{padding:23px;border-bottom:1px solid #ffffff12}
+.side-head .logo{color:white}
+.side-user{padding:17px 22px;border-bottom:1px solid #ffffff12}
+.side-actions{padding:12px;display:flex;gap:8px}
+.side-actions button{flex:1;font-size:12px}
+#memberList{overflow:auto;flex:1;padding:8px}
+.member{padding:14px;border-radius:10px;cursor:pointer;margin-bottom:5px}
+.member:hover,.member.active{background:#ffffff13}
+.member strong{display:block;font-size:14px}
+.member small{color:#a8adbd}
+.side-bottom{padding:15px;border-top:1px solid #ffffff12}
+.side-bottom button{width:100%;background:#343849}
+.main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--light)}
+.topbar{height:68px;background:white;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 22px}
+.topbar h3{margin:0}
+#chatArea{flex:1;overflow:auto;padding:22px}
+.welcome{height:100%;display:grid;place-items:center;text-align:center;color:var(--muted)}
+.message{max-width:75%;width:max-content;margin:10px 0;padding:12px 15px;border-radius:14px;background:white;box-shadow:0 2px 8px #11111108;overflow-wrap:anywhere}
+.message.mine{margin-left:auto;background:#e9e5ff}
+.message small{display:block;margin-top:6px;color:#85899a;font-size:10px}
+.composer{display:flex;gap:10px;padding:15px;background:white;border-top:1px solid var(--border)}
+.composer input{flex:1}
+#adminPanel{padding:18px;background:white;border-bottom:1px solid var(--border);max-height:230px;overflow:auto}
+.user-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)}
+.user-row button{padding:8px 12px;font-size:12px}
+#notice{padding:12px 16px;background:#fff4d8;color:#74551b;font-size:13px}
+@media(max-width:650px){
+.sidebar{width:115px}
+.side-head{padding:15px 8px;text-align:center}
+.side-head .logo{font-size:20px;letter-spacing:2px}
+.side-user{padding:12px 7px;font-size:11px;overflow-wrap:anywhere}
+.side-actions{flex-direction:column;padding:7px}
+.side-actions button{padding:9px 4px;font-size:10px}
+.member{padding:10px 6px}
+.member strong{font-size:11px;overflow-wrap:anywhere}
+.member small{font-size:9px}
+.side-bottom{padding:7px}
+.side-bottom button{font-size:10px;padding:9px 3px}
+.topbar{padding:0 12px}
+#chatArea{padding:12px}
+.message{max-width:88%}
+}
+</style>
+</head>
+<body>
+
+<section id="auth">
+ <div class="auth-card">
+  <div class="logo">NEXO</div>
+  <p class="muted">Private conversations. Your space.</p>
+  <h2 id="authTitle">Welcome back</h2>
+  <input id="nameInput" class="hidden" placeholder="Your display name">
+  <input id="emailInput" type="email" placeholder="Email address">
+  <input id="passwordInput" type="password" placeholder="Password">
+  <button id="authButton" onclick="authenticate()">Log in</button>
+  <p class="muted" id="authMessage"></p>
+  <p class="muted" style="text-align:center">
+   <span id="switchText">New to NEXO?</span>
+   <a href="#" onclick="toggleAuth();return false" style="color:#7965ed">Create account</a>
+  </p>
+ </div>
+</section>
+
+<section id="pending" class="hidden" style="min-height:100vh;display:grid;place-items:center;text-align:center;padding:25px">
+ <div><div class="logo">NEXO</div><h2>Account awaiting approval</h2>
+ <p class="muted">Your account has been created. An administrator must approve it before you can use NEXO.</p>
+ <button onclick="logout()">Log out</button></div>
+</section>
+
+<section id="app" class="hidden">
+ <aside class="sidebar">
+  <div class="side-head"><div class="logo">NEXO</div><small>PRIVATE NETWORK</small></div>
+  <div class="side-user"><strong id="myName">Member</strong><br><small id="myRole">Member</small></div>
+  <div class="side-actions">
+   <button onclick="loadMembers()">Members</button>
+   <button id="adminButton" class="hidden" onclick="loadAdmin()">Admin</button>
+  </div>
+  <div id="memberList"></div>
+  <div class="side-bottom"><button onclick="logout()">Log out</button></div>
+ </aside>
+ <main class="main">
+  <header class="topbar"><h3 id="chatTitle">Your conversations</h3><span class="muted">NEXO</span></header>
+  <div id="notice" class="hidden"></div>
+  <div id="adminPanel" class="hidden"></div>
+  <div id="chatArea"><div class="welcome"><div><h2>Welcome to NEXO</h2><p>Select a member to start a private conversation.</p></div></div></div>
+  <form class="composer" id="messageForm" onsubmit="sendMessage(event)">
+   <input id="messageInput" placeholder="Select a conversation first..." disabled autocomplete="off">
+   <button id="sendButton" disabled>Send</button>
+  </form>
+ </main>
+</section>
+
+<script>
+const SUPABASE_URL = "https://ieuqlsogiqszikbqryol.supabase.co";
+const SUPABASE_KEY = "sb_publishable_SF7hbP_9_GVrN1pw9VIIWA_UjCL_Gxv";
+const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+let currentUser = null;
+let myProfile = null;
+let currentConversation = null;
+let realtimeChannel = null;
+let presenceChannel = null;
+let signupMode = false;
+
+const $ = id => document.getElementById(id);
+
+function show(id){
+ ["auth","pending","app"].forEach(x => $(x).classList.add("hidden"));
+ $(id).classList.remove("hidden");
+}
+
+function toggleAuth(){
+ signupMode = !signupMode;
+ $("nameInput").classList.toggle("hidden",!signupMode);
+ $("authTitle").textContent = signupMode ? "Create your account" : "Welcome back";
+ $("authButton").textContent = signupMode ? "Create account" : "Log in";
+ $("switchText").textContent = signupMode ? "Already registered?" : "New to NEXO?";
+ document.querySelector("#switchText + a").textContent = signupMode ? "Log in" : "Create account";
+ $("authMessage").textContent = "";
+}
+
+async function authenticate(){
+ const email = $("emailInput").value.trim();
+ const password = $("passwordInput").value;
+ const name = $("nameInput").value.trim();
+ if(!email || !password || (signupMode && !name)){
+  $("authMessage").textContent = "Please complete all fields.";
+  return;
+ }
+ $("authButton").disabled = true;
+ $("authMessage").textContent = "Please wait...";
+ try{
+  if(signupMode){
+   const {data,error} = await db.auth.signUp({
+    email,password,
+    options:{data:{display_name:name}}
+   });
+   if(error) throw error;
+   if(data.session){
+    await loadAccount();
+   }else{
+    $("authMessage").textContent = "Account created. Check your email to confirm, then log in.";
+   }
+  }else{
+   const {error} = await db.auth.signInWithPassword({email,password});
+   if(error) throw error;
+   await loadAccount();
+  }
+ }catch(e){
+  $("authMessage").textContent = e.message;
+ }finally{
+  $("authButton").disabled = false;
+ }
+}
+
+async function loadAccount(){
+ const {data:{user},error} = await db.auth.getUser();
+ if(error || !user){show("auth");return}
+ currentUser = user;
+ const {data:profile,error:profileError} = await db
+  .from("nexo2_profiles")
+  .select("*")
+  .eq("id",user.id)
+  .single();
+ if(profileError || !profile){
+  $("authMessage").textContent = "Profile not found. Contact the administrator.";
+  show("auth");return;
+ }
+ myProfile = profile;
+ if(profile.approval_status !== "approved"){
+  show("pending");return;
+ }
+ show("app");
+ $("myName").textContent = profile.display_name || user.email;
+ $("myRole").textContent = profile.role || "Member";
+ if(profile.role === "admin") $("adminButton").classList.remove("hidden");
+ loadMembers();
+ startPresence();
+}
+
+async function logout(){
+ if(realtimeChannel) await db.removeChannel(realtimeChannel);
+ if(presenceChannel) await db.removeChannel(presenceChannel);
+ await db.auth.signOut();
+ currentUser = null;myProfile = null;currentConversation = null;
+ show("auth");
+}
+
+async function loadMembers(){
+ $("adminPanel").classList.add("hidden");
+ const {data,error} = await db.from("nexo2_profiles")
+  .select("id,display_name,role,approval_status")
+  .eq("approval_status","approved")
+  .neq("id",currentUser.id)
+  .order("display_name");
+ if(error){alert(error.message);return}
+ const list = $("memberList");
+ list.innerHTML = "";
+ (data || []).forEach(member=>{
+  const el = document.createElement("div");
+  el.className = "member";
+  const name = document.createElement("strong");
+  name.textContent = member.display_name || "NEXO member";
+  const sub = document.createElement("small");
+  sub.textContent = "Member";
+  el.append(name,sub);
+  el.onclick = ()=>startConversation(member.id,member.display_name || "Member");
+  list.appendChild(el);
+ });
+ if(!data || !data.length) list.textContent = "No other approved members yet.";
+}
+
+async function startConversation(otherUserId,otherName){
+ $("chatTitle").textContent = otherName;
+ $("chatArea").innerHTML = '<div class="welcome">Opening conversation...</div>';
+ const {data,error} = await db.rpc("nexo2_start_conversation",{
+  p_other_user_id:otherUserId
+ });
+ if(error){alert("Could not start conversation: "+error.message);return}
+ currentConversation = typeof data === "string" ? data : data?.id;
+ if(!currentConversation){alert("Conversation ID was not returned. Check the RPC function.");return}
+ $("messageInput").disabled = false;
+ $("sendButton").disabled = false;
+ $("messageInput").placeholder = "Write a private message...";
+ await loadMessages();
+ subscribeMessages();
+}
+
+async function loadMessages(){
+ if(!currentConversation)return;
+ const {data,error} = await db.from("nexo2_messages")
+  .select("*")
+  .eq("conversation_id",currentConversation)
+  .order("created_at",{ascending:true});
+ if(error){$("chatArea").textContent = error.message;return}
+ const area = $("chatArea");
+ area.innerHTML = "";
+ (data || []).forEach(addMessage);
+ area.scrollTop = area.scrollHeight;
+ await db.from("nexo2_members")
+  .update({last_read_at:new Date().toISOString()})
+  .eq("conversation_id",currentConversation)
+  .eq("user_id",currentUser.id);
+}
+
+function addMessage(msg){
+ const area = $("chatArea");
+ const item = document.createElement("div");
+ item.className = "message"+(msg.sender_id === currentUser.id ? " mine" : "");
+ const body = document.createElement("div");
+ body.textContent = msg.content;
+ const time = document.createElement("small");
+ time.textContent = new Date(msg.created_at).toLocaleString();
+ item.append(body,time);
+ area.appendChild(item);
+}
+
+async function sendMessage(event){
+ event.preventDefault();
+ const input = $("messageInput");
+ const content = input.value.trim();
+ if(!content || !currentConversation)return;
+ input.value = "";
+ const {error} = await db.from("nexo2_messages").insert({
+  conversation_id:currentConversation,
+  sender_id:currentUser.id,
+  content
+ });
+ if(error){alert("Message failed: "+error.message);input.value = content}
+}
+
+function subscribeMessages(){
+ if(realtimeChannel) db.removeChannel(realtimeChannel);
+ realtimeChannel = db.channel("chat-"+currentConversation)
+  .on("postgres_changes",{
+   event:"INSERT",schema:"public",table:"nexo2_messages",
+   filter:"conversation_id=eq."+currentConversation
+  },payload=>{
+   if(payload.new.sender_id !== currentUser.id) addMessage(payload.new);
+   $("chatArea").scrollTop = $("chatArea").scrollHeight;
+  }).subscribe();
+}
+
+async function loadAdmin(){
+ if(myProfile?.role !== "admin")return;
+ $("adminPanel").classList.remove("hidden");
+ $("adminPanel").textContent = "Loading member requests...";
+ const {data,error} = await db.from("nexo2_profiles")
+  .select("id,display_name,role,approval_status,created_at")
+  .eq("approval_status","pending")
+  .order("created_at");
+ if(error){$("adminPanel").textContent = error.message;return}
+ const panel = $("adminPanel");
+ panel.innerHTML = "<strong>Pending member requests</strong>";
+ if(!data?.length){
+  panel.innerHTML += '<p class="muted">No pending requests.</p>';return;
+ }
+ data.forEach(person=>{
+  const row = document.createElement("div");
+  row.className = "user-row";
+  const name = document.createElement("span");
+  name.textContent = person.display_name || "New member";
+  const actions = document.createElement("div");
+  const approve = document.createElement("button");
+  approve.textContent = "Approve";
+  approve.onclick = ()=>updateApproval(person.id,"approved");
+  const reject = document.createElement("button");
+  reject.textContent = "Reject";
+  reject.style.background = "#d65a65";
+  reject.onclick = ()=>updateApproval(person.id,"rejected");
+  actions.append(approve,reject);
+  row.append(name,actions);
+  panel.appendChild(row);
+ });
+}
+
+async function updateApproval(userId,status){
+ const {error} = await db.from("nexo2_profiles")
+  .update({approval_status:status})
+  .eq("id",userId);
+ if(error){alert(error.message);return}
+ loadAdmin();
+}
+
+async function startPresence(){
+ presenceChannel = db.channel("nexo-presence",{config:{presence:{key:currentUser.id}}});
+ await presenceChannel.on("presence",{event:"sync"},()=>{})
+  .subscribe(async status=>{
+   if(status === "SUBSCRIBED"){
+    await presenceChannel.track({online_at:new Date().toISOString()});
+   }
+  });
+}
+
+db.auth.onAuthStateChange(async(event,session)=>{
+ if(event === "SIGNED_IN" && session?.user && !currentUser){
+  await loadAccount();
+ }
+});
+
+db.auth.getSession().then(({data})=>{
+ if(data.session) loadAccount();
+});
+</script>
+</body>
+  </html>
+  
